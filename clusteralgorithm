@@ -1,0 +1,167 @@
+clc  %clear command window
+clear all
+close all
+
+%ERSTER SCHRITT: Einlesen der Primärcluster
+%Name der Datei: "PrimaerclusterMatlab"; Name des Tabs: "alle Primaercluster"
+
+try
+    load ('primaercluster.mat')
+catch
+    folder_Rohdaten = uigetfile('*.xlsx','Exel-Datei mit Rohdaten wählen', "L:\Persönliche Ordner\Wissenschaftler\Preiss, Felix\Persönlich\Matlab Ulrike\"); %Ordner mit Daten vom User abfragen
+    
+    all_primary_cluster = importfile(folder_Rohdaten, "alle Primaercluster_C", [2, 143]);
+    %hier noch Tabellenbereich anpassen
+    %überprüfen: Überschriften??
+    
+    save([pwd '\primaercluster.mat'],'all_primary_cluster')
+end
+
+row_names = all_primary_cluster.Properties.VariableNames;
+
+variabeln = 1:1:162;
+kombinationen = nchoosek(variabeln,2);
+
+try
+    load ('schnittmenge.mat')
+catch
+    
+    schnittmenge=strings(size(all_primary_cluster,1),size(kombinationen,1));
+    
+    for i=1:size(kombinationen,1)
+        temp = intersect(table2array(all_primary_cluster(:,kombinationen(i,1))),table2array(all_primary_cluster(:,kombinationen(i,2))));
+        if size(temp,1)>1
+            temp(1)=[]; %Lösche überflüssige leere Zeile
+        end
+        schnittmenge(1:size(temp,1),i)=temp;
+    end
+    
+    save([pwd '\schnittmenge.mat'],'schnittmenge')
+    
+end
+
+try
+    load ('ergebnis.mat')
+catch
+    Data(size(row_names,2))=struct();
+    
+    for i=1:size(row_names,2)
+        Data(i).Ausgangvariable=row_names(1,i); %wähle die Ausgangsvariable für den Vergleich
+    end
+    
+    for a=1:size(row_names,2) % gehe durch alle Ausgangsvariabeln
+        uebereinstimmung = ismember(kombinationen,a); %schauen in welcher Kombination die a.te Ausgangsvariable drin ist
+        uebereinstimmung=sum(uebereinstimmung,2);
+        Data(a).kombination_auswahl=strings(sum(uebereinstimmung),2); %initialisieren
+        b=1;
+        for i=1:size(kombinationen,1)
+            if uebereinstimmung(i)==1
+                Data(a).kombination_auswahl(b,1)=kombinationen(i,1); %Kombination der Variabeln zu den Ausgangsvariabeln schreiben
+                Data(a).kombination_auswahl(b,2)=kombinationen(i,2);
+                Data(a).schnittmenge_auswahl(b,:)=schnittmenge(:,i)'; % zu der Kombination passende Schnittmenge anhängen (transponiert)
+                b=b+1;
+            end
+        end
+        
+        %     loeschen=zeros(size(Data(a).kombination_auswahl,1),1);
+        %     for i=1:size(Data(a).kombination_auswahl,1)
+        %         if Data(a).schnittmenge_auswahl(i,5)==""
+        %             loeschen(i,1)=1;
+        %         end
+        %     end
+        
+        for i=size(Data(a).kombination_auswahl,1):-1:1
+            if Data(a).schnittmenge_auswahl(i,5)=="" % alle Zeilen löschen in denen weniger als 5 Texte gefunden wurden
+                Data(a).schnittmenge_auswahl(i,:)=[];
+                Data(a).kombination_auswahl(i,:)=[];
+            end
+        end
+        
+        Data(a).verbleibende_texte= unique(Data(a).schnittmenge_auswahl); %suche nach allen Texten ohne Doppelung
+        if isempty(Data(a).kombination_auswahl)== 0 %arbeite nur mit Zeilen in denen auch Daten stehen
+            if size(Data(a).verbleibende_texte,2)>size(Data(a).verbleibende_texte,1) %mache aus Zeilen einen Spaltenvektor, falls vorhanden
+                Data(a).verbleibende_texte=Data(a).verbleibende_texte';
+            end
+            
+            Data(a).verbleibende_texte(1)=[]; %erstes Element löschen, da leerzeichen ist
+            variabeln2 = 1:1:size(Data(a).verbleibende_texte,1);
+            Data(a).kombinationen = nchoosek(variabeln2,2); %generiere alle möglichen 2er Kombis der texte
+            
+            Data(a).kombination_auswahl2=strings(size(Data(a).kombinationen,1),2); %initialisieren
+            Data(a).haufigkeit_kombi=zeros(size(Data(a).kombinationen,1),1); %initialisieren
+            for c=1:1:size(Data(a).kombinationen,1) %gehe durch alle textkombinationen
+                Data(a).kombination_auswahl2(c,1)=Data(a).verbleibende_texte(Data(a).kombinationen(c,1)); %setzte die Textkombis zusammen in Array
+                Data(a).kombination_auswahl2(c,2)=Data(a).verbleibende_texte(Data(a).kombinationen(c,2));
+                for d=1:1:size(Data(a).schnittmenge_auswahl,1) %gehe durch alle schnittmengen
+                    if sum(ismember(Data(a).kombination_auswahl2(c,:),Data(a).schnittmenge_auswahl(d,:)))==2 %schaue, ob text kombi in kombinationsauswahl drin ist und hochzählen
+                        Data(a).haufigkeit_kombi(c)=Data(a).haufigkeit_kombi(c) +1;
+                    end
+                end
+            end
+        end
+        
+        
+        
+    end
+    
+    save([pwd '\ergebnis.mat'],'Data')
+end
+
+function PrimaerclusterMatlab = importfile(workbookFile, sheetName, dataLines)
+%IMPORTFILE Import data from a spreadsheet
+%  PRIMAERCLUSTERMATLAB = IMPORTFILE(FILE) reads data from the first
+%  worksheet in the Microsoft Excel spreadsheet file named FILE.
+%  Returns the data as a table.
+%
+%  PRIMAERCLUSTERMATLAB = IMPORTFILE(FILE, SHEET) reads from the
+%  specified worksheet.
+%
+%  PRIMAERCLUSTERMATLAB = IMPORTFILE(FILE, SHEET, DATALINES) reads from
+%  the specified worksheet for the specified row interval(s). Specify
+%  DATALINES as a positive scalar integer or a N-by-2 array of positive
+%  scalar integers for dis-contiguous row intervals.
+%
+%  Example:
+%  PrimaerclusterMatlab = importfile("L:\Persönliche Ordner\Wissenschaftler\Preiss, Felix\Persönlich\Matlab Ulrike\PrimaerclusterMatlab.xlsx", "alle Primaercluster_C", [2, 143]);
+%
+%  See also READTABLE.
+%
+% Auto-generated by MATLAB on 18-Jul-2021 10:51:18
+
+%% Input handling
+
+% If no sheet is specified, read first sheet
+if nargin == 1 || isempty(sheetName)
+    sheetName = 1;
+end
+
+% If row start and end points are not specified, define defaults
+if nargin <= 2
+    dataLines = [2, 143];
+end
+
+%% Setup the Import Options and import the data
+opts = spreadsheetImportOptions("NumVariables", 162);
+
+% Specify sheet and range
+opts.Sheet = sheetName;
+opts.DataRange = "A" + dataLines(1, 1) + ":FF" + dataLines(1, 2);
+
+% Specify column names and types
+opts.VariableNames = ["SumW_110", "SumW_1120", "SumW_2150", "SumW_51100", "SumW_101200", "SumW_201500", "SumW_5011500", "SumW_15013000", "SumS_12", "SumS_35", "SumS_610", "SumS_1120", "SumS_2150", "SumS_51100", "SumS_101160", "SIG", "Min", "Maj", "SIG_Min", "SIG_Maj", "sonstSA", "SM", "PC", "hand", "mixSA", "sonstM", "Komm", "StPap", "Post", "BogPap", "Komm_Post", "Gesch_0", "Gesch_12", "Gesch_34", "Brief_0", "Brief_12", "Brief_36", "sonstStr_0", "sonstStr_12", "sonstStr_38", "Abs_0", "Abs_02", "Abs_25", "Abs_510", "Abs_1020", "Abs_2050", "IPZ_0", "IPZ_05", "IPZ_510", "IPZ_1020", "IPZ_2050", "IPZ_50", "vIPZ_0", "vIPZ_12", "vIPZ_35", "vIPZ_610", "vIPZ_1120", "IPF_0", "IPF_15", "IPF_510", "IPF_1020", "IPF_2050", "IPF_50100", "IPF_100", "typB_0", "typB_02", "typB_25", "typB_510", "typB_1020", "typB_20", "orthF_0", "orthF_02", "orthF_25", "orthF_510", "orthF_1020", "orthF_20", "orthB_0", "orthB_02", "orthB_25", "orthB_510", "orthB_1020", "orthB_20", "LexHob_0", "LexHob_02", "LexHob_25", "LexHob_510", "LexHob_1020", "LexHob_20", "LexSen_0", "LexSen_02", "LexSen_25", "LexSen_510", "LexSen_1020", "LexSen_20", "LexF_0", "LexF_01", "LexF_15", "LexF_5", "Gend_0", "Gend_01", "Gend_12", "Dial_0", "Dial_01", "Dial_15", "Dial_510", "Dial_10", "WSp_0", "WSp_01", "WSp_12", "WSp_25", "WSp_5", "FrSp_0", "FrSp_01", "FrSp_110", "FrSp_10", "SXF_0", "SXF_05", "SXF_510", "SXF_1020", "SXF_2050", "SXF_50100", "SXB_0", "SXB_05", "SXB_510", "SXB_1020", "SXB_2050", "SXB_50100", "Verb_0", "Verb_25", "Verb_510", "Verb_1020", "Verb_20", "vVerb_0", "vVerb_02", "vVerb_25", "vVerb_510", "vVerb_1020", "Eup_0", "Eup_01", "Eup_15", "Eup_5", "Sref_0", "Sref_01", "Sref_12", "Sref_25", "Sref_510", "Sref_10", "ARPN_0", "ARPN_02", "ARPN_25", "ARPN_510", "ARPN_1020", "SumAbb_0", "SumAbb_12", "SumAbb_35", "SumAbb_610", "SumAbb_11", "Num_0", "Num_01", "Num_12", "Num_25", "Num_510"];
+opts.VariableTypes = ["string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string", "string"];
+
+% Specify variable properties
+opts = setvaropts(opts, ["SumW_110", "SumW_1120", "SumW_2150", "SumW_51100", "SumW_101200", "SumW_201500", "SumW_5011500", "SumW_15013000", "SumS_12", "SumS_35", "SumS_610", "SumS_1120", "SumS_2150", "SumS_51100", "SumS_101160", "SIG", "Min", "Maj", "SIG_Min", "SIG_Maj", "sonstSA", "SM", "PC", "hand", "mixSA", "sonstM", "Komm", "StPap", "Post", "BogPap", "Komm_Post", "Gesch_0", "Gesch_12", "Gesch_34", "Brief_0", "Brief_12", "Brief_36", "sonstStr_0", "sonstStr_12", "sonstStr_38", "Abs_0", "Abs_02", "Abs_25", "Abs_510", "Abs_1020", "Abs_2050", "IPZ_0", "IPZ_05", "IPZ_510", "IPZ_1020", "IPZ_2050", "IPZ_50", "vIPZ_0", "vIPZ_12", "vIPZ_35", "vIPZ_610", "vIPZ_1120", "IPF_0", "IPF_15", "IPF_510", "IPF_1020", "IPF_2050", "IPF_50100", "IPF_100", "typB_0", "typB_02", "typB_25", "typB_510", "typB_1020", "typB_20", "orthF_0", "orthF_02", "orthF_25", "orthF_510", "orthF_1020", "orthF_20", "orthB_0", "orthB_02", "orthB_25", "orthB_510", "orthB_1020", "orthB_20", "LexHob_0", "LexHob_02", "LexHob_25", "LexHob_510", "LexHob_1020", "LexHob_20", "LexSen_0", "LexSen_02", "LexSen_25", "LexSen_510", "LexSen_1020", "LexSen_20", "LexF_0", "LexF_01", "LexF_15", "LexF_5", "Gend_0", "Gend_01", "Gend_12", "Dial_0", "Dial_01", "Dial_15", "Dial_510", "Dial_10", "WSp_0", "WSp_01", "WSp_12", "WSp_25", "WSp_5", "FrSp_0", "FrSp_01", "FrSp_110", "FrSp_10", "SXF_0", "SXF_05", "SXF_510", "SXF_1020", "SXF_2050", "SXF_50100", "SXB_0", "SXB_05", "SXB_510", "SXB_1020", "SXB_2050", "SXB_50100", "Verb_0", "Verb_25", "Verb_510", "Verb_1020", "Verb_20", "vVerb_0", "vVerb_02", "vVerb_25", "vVerb_510", "vVerb_1020", "Eup_0", "Eup_01", "Eup_15", "Eup_5", "Sref_0", "Sref_01", "Sref_12", "Sref_25", "Sref_510", "Sref_10", "ARPN_0", "ARPN_02", "ARPN_25", "ARPN_510", "ARPN_1020", "SumAbb_0", "SumAbb_12", "SumAbb_35", "SumAbb_610", "SumAbb_11", "Num_0", "Num_01", "Num_12", "Num_25", "Num_510"], "WhitespaceRule", "preserve");
+opts = setvaropts(opts, ["SumW_110", "SumW_1120", "SumW_2150", "SumW_51100", "SumW_101200", "SumW_201500", "SumW_5011500", "SumW_15013000", "SumS_12", "SumS_35", "SumS_610", "SumS_1120", "SumS_2150", "SumS_51100", "SumS_101160", "SIG", "Min", "Maj", "SIG_Min", "SIG_Maj", "sonstSA", "SM", "PC", "hand", "mixSA", "sonstM", "Komm", "StPap", "Post", "BogPap", "Komm_Post", "Gesch_0", "Gesch_12", "Gesch_34", "Brief_0", "Brief_12", "Brief_36", "sonstStr_0", "sonstStr_12", "sonstStr_38", "Abs_0", "Abs_02", "Abs_25", "Abs_510", "Abs_1020", "Abs_2050", "IPZ_0", "IPZ_05", "IPZ_510", "IPZ_1020", "IPZ_2050", "IPZ_50", "vIPZ_0", "vIPZ_12", "vIPZ_35", "vIPZ_610", "vIPZ_1120", "IPF_0", "IPF_15", "IPF_510", "IPF_1020", "IPF_2050", "IPF_50100", "IPF_100", "typB_0", "typB_02", "typB_25", "typB_510", "typB_1020", "typB_20", "orthF_0", "orthF_02", "orthF_25", "orthF_510", "orthF_1020", "orthF_20", "orthB_0", "orthB_02", "orthB_25", "orthB_510", "orthB_1020", "orthB_20", "LexHob_0", "LexHob_02", "LexHob_25", "LexHob_510", "LexHob_1020", "LexHob_20", "LexSen_0", "LexSen_02", "LexSen_25", "LexSen_510", "LexSen_1020", "LexSen_20", "LexF_0", "LexF_01", "LexF_15", "LexF_5", "Gend_0", "Gend_01", "Gend_12", "Dial_0", "Dial_01", "Dial_15", "Dial_510", "Dial_10", "WSp_0", "WSp_01", "WSp_12", "WSp_25", "WSp_5", "FrSp_0", "FrSp_01", "FrSp_110", "FrSp_10", "SXF_0", "SXF_05", "SXF_510", "SXF_1020", "SXF_2050", "SXF_50100", "SXB_0", "SXB_05", "SXB_510", "SXB_1020", "SXB_2050", "SXB_50100", "Verb_0", "Verb_25", "Verb_510", "Verb_1020", "Verb_20", "vVerb_0", "vVerb_02", "vVerb_25", "vVerb_510", "vVerb_1020", "Eup_0", "Eup_01", "Eup_15", "Eup_5", "Sref_0", "Sref_01", "Sref_12", "Sref_25", "Sref_510", "Sref_10", "ARPN_0", "ARPN_02", "ARPN_25", "ARPN_510", "ARPN_1020", "SumAbb_0", "SumAbb_12", "SumAbb_35", "SumAbb_610", "SumAbb_11", "Num_0", "Num_01", "Num_12", "Num_25", "Num_510"], "EmptyFieldRule", "auto");
+
+% Import the data
+PrimaerclusterMatlab = readtable(workbookFile, opts, "UseExcel", false);
+
+for idx = 2:size(dataLines, 1)
+    opts.DataRange = "A" + dataLines(idx, 1) + ":FF" + dataLines(idx, 2);
+    tb = readtable(workbookFile, opts, "UseExcel", false);
+    PrimaerclusterMatlab = [PrimaerclusterMatlab; tb]; %#ok<AGROW>
+end
+
+end
